@@ -241,15 +241,18 @@ export function SetupScreen({
         {players.length > 0 && (
           <ul className="player-chips">
             {players.map((p) => (
-              <li key={p.id} className="chip">
-                <span className="chip-name">{p.name}</span>
+              <li key={p.id}>
                 <button
                   type="button"
-                  className="chip-remove"
+                  className="chip"
                   onClick={() => onRemovePlayer(p.id)}
                   aria-label={`Remove ${p.name}`}
+                  title={`Remove ${p.name}`}
                 >
-                  ×
+                  <span className="chip-name">{p.name}</span>
+                  <span className="chip-remove" aria-hidden="true">
+                    ×
+                  </span>
                 </button>
               </li>
             ))}

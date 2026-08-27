@@ -10,6 +10,7 @@ import {
 import { ClipMeter } from './ClipMeter'
 import { TrackScrubber } from './TrackScrubber'
 import { VolumeControl } from './VolumeControl'
+import { audioEngine } from '../audio/engine'
 import type { SearchHit } from '../game/search'
 import type { GameState, Track } from '../types'
 
@@ -102,8 +103,16 @@ export function PlayScreen({
       }
       if (
         state.phase === 'reveal' &&
+        e.code === 'Space'
+      ) {
+        e.preventDefault()
+        audioEngine.togglePause()
+        return
+      }
+      if (
+        state.phase === 'reveal' &&
         !(state.lastCorrect && state.players.length) &&
-        (enter || e.code === 'Space')
+        enter
       ) {
         e.preventDefault()
         onNext()
@@ -307,8 +316,9 @@ export function PlayScreen({
 function Scoreboard({ players }: { players: GameState['players'] }) {
   if (!players.length) return <div className="scoreboard empty" />
   const sorted = [...players].sort((a, b) => b.score - a.score)
+  const dense = sorted.length > 6
   return (
-    <ul className="scoreboard">
+    <ul className={`scoreboard${dense ? ' scoreboard-dense' : ''}`}>
       {sorted.map((p) => (
         <li key={p.id}>
           <span className="sb-name">{p.name}</span>

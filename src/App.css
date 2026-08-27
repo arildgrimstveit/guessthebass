@@ -508,7 +508,7 @@ h2 {
 .btn:focus-visible,
 .input:focus-visible,
 .result-row:focus-visible,
-.chip-remove:focus-visible {
+.chip:focus-visible {
   outline: 2px solid var(--sunset);
   outline-offset: 3px;
 }
@@ -614,6 +614,7 @@ h2 {
 }
 
 .chip {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 0.15rem;
@@ -623,6 +624,16 @@ h2 {
   background: var(--sunset);
   color: #1a0c04;
   border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.chip:hover {
+  filter: brightness(1.06);
+}
+
+.chip:hover .chip-remove {
+  opacity: 1;
 }
 
 .chip-name {
@@ -641,7 +652,6 @@ h2 {
 }
 
 .chip-remove {
-  appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -649,23 +659,11 @@ h2 {
   width: auto;
   margin: 0;
   padding: 0 0.5rem 0 0.15rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: #1a0c04;
   font-size: 1.5rem;
   font-weight: 500;
   line-height: 1;
-  cursor: pointer;
   opacity: 0.65;
   transform: translateY(-0.06em);
-}
-
-.chip-remove:hover {
-  background: transparent;
-  color: #1a0c04;
-  border-color: transparent;
-  opacity: 1;
 }
 
 .status {
@@ -694,24 +692,34 @@ h2 {
 }
 
 .play-top {
-  display: table;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 0.85rem 1rem;
   width: 100%;
-  height: 1px; /* row sizes to content; 100% children fill that height */
-  border-collapse: separate;
-  border-spacing: 1rem 0;
 }
 
 .play-brand,
 .play-score-slot,
 .play-vol-slot,
 .play-host-slot {
-  display: table-cell;
-  vertical-align: middle;
-  height: 100%;
+  min-width: 0;
 }
 
 .play-brand {
-  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 0 0 auto;
+  align-self: stretch;
+  box-sizing: border-box;
+  padding: 0.55rem 0.95rem;
+  background: linear-gradient(180deg, rgba(26, 16, 10, 0.95), rgba(5, 4, 3, 0.98));
+  border: 1px solid color-mix(in srgb, var(--walnut-light) 30%, #000);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(196, 137, 74, 0.12), 0 10px 24px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
 }
 
 .play-brand .eyebrow {
@@ -725,32 +733,33 @@ h2 {
 }
 
 .play-score-slot {
-  width: 1%;
+  display: flex;
+  align-items: stretch;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .play-score-slot .scoreboard {
-  height: 100%;
   width: max-content;
   max-width: 100%;
   box-sizing: border-box;
-  flex-wrap: nowrap;
-  white-space: nowrap;
 }
 
-.play-vol-slot {
-  width: 1%;
+.play-vol-slot,
+.play-host-slot {
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
 }
 
 .play-vol-slot .volume-control {
   display: flex;
   align-items: center;
-  height: 100%;
+  align-self: stretch;
+  height: auto;
   min-height: 100%;
   margin: 0;
-}
-
-.play-host-slot {
-  width: 1%;
+  box-sizing: border-box;
 }
 
 .play-host-controls {
@@ -765,7 +774,6 @@ h2 {
   align-items: center;
   justify-content: center;
   height: 100%;
-  width: 100%;
   box-sizing: border-box;
   white-space: nowrap;
 }
@@ -785,27 +793,42 @@ h2 {
   padding: 0.55rem 0.9rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem 1.25rem;
+  justify-content: flex-start;
+  align-content: center;
+  align-items: baseline;
+  gap: 0.4rem 1.1rem;
   background: linear-gradient(180deg, rgba(26, 16, 10, 0.95), rgba(5, 4, 3, 0.98));
   border: 1px solid color-mix(in srgb, var(--walnut-light) 30%, #000);
   border-radius: 8px;
   width: max-content;
-  justify-content: flex-end;
-  align-items: center;
-  align-content: center;
+  max-width: 100%;
+  box-sizing: border-box;
   box-shadow: inset 0 1px 0 rgba(196, 137, 74, 0.12), 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.scoreboard-dense {
+  gap: 0.28rem 0.75rem;
+  padding: 0.4rem 0.7rem;
 }
 
 .scoreboard li {
   display: inline-flex;
   align-items: baseline;
-  gap: 0.4rem;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.scoreboard-dense li {
+  gap: 0.25rem;
 }
 
 .scoreboard.empty {
+  display: block;
   background: transparent;
   border: none;
   min-width: 0;
+  width: 0;
   padding: 0;
   box-shadow: none;
 }
@@ -826,6 +849,12 @@ h2 {
   font-size: 0.95rem;
   letter-spacing: 0.02em;
   line-height: 1.2;
+}
+
+.scoreboard-dense .sb-name,
+.scoreboard-dense .sb-score {
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
 }
 
 .center-stage {

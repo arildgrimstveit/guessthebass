@@ -34,9 +34,10 @@ Open the app, pick a music folder, optionally add players, then start.
 | Key | When | Action |
 |-----|------|--------|
 | Space | Playing, search not focused | Replay current clip |
+| Space | Reveal / award | Pause or resume full track |
 | ↑ / ↓ | Search open | Move highlight |
 | Enter | Playing with results | Submit highlighted guess |
-| Enter / Space | Reveal (no award grid) | Next track |
+| Enter | Reveal (no award grid) | Next track |
 
 Host buttons: **Play**, **Extend** / **Reveal**, **Skip track**, **End**.
 

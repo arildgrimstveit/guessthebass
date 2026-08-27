@@ -34,6 +34,7 @@ export class AudioEngine {
   private playStartedAt = 0
   private playDuration = 0
   private playOffset = 0
+  private pausedAt: number | null = null
   private volume = readStoredVolume()
   private prepared: Prepared | null = null
   private prefetchGen = 0
@@ -161,7 +162,13 @@ export class AudioEngine {
   /** Position in the loaded file (seconds), for the full-track scrubber. */
   getTimeline(): { position: number; duration: number; playing: boolean } {
     const duration = this.buffer?.duration ?? 0
-    if (!this.ctx || duration <= 0 || this.playDuration <= 0) {
+    if (!this.ctx || duration <= 0) {
+      return { position: 0, duration, playing: false }
+    }
+    if (this.pausedAt != null) {
+      return { position: this.pausedAt, duration, playing: false }
+    }
+    if (this.playDuration <= 0) {
       return { position: 0, duration, playing: false }
     }
     const elapsed = Math.min(
@@ -190,6 +197,7 @@ export class AudioEngine {
     if (!this.buffer) return
     const duration = this.buffer.duration
     const t = Math.min(Math.max(0, positionSeconds), Math.max(0, duration - 0.05))
+    this.pausedAt = null
     void this.resume()
     this.startSource(duration - t, t)
   }
@@ -201,6 +209,7 @@ export class AudioEngine {
    */
   playClip(durationSeconds: number, mode: 'restart' | 'extend' = 'restart'): void {
     if (!this.buffer) return
+    this.pausedAt = null
     const offset = this.energyStart
     const maxDur = Math.max(0.01, this.buffer.duration - offset)
     const dur = Math.min(durationSeconds, maxDur)
@@ -221,10 +230,32 @@ export class AudioEngine {
   /** Play the loaded file from 0:00 through the end. */
   playFull(): void {
     if (!this.buffer) return
+    this.pausedAt = null
     this.startSource(this.buffer.duration, 0)
   }
 
+  /** Pause full-track playback, or resume from the paused position. */
+  togglePause(): void {
+    if (!this.buffer) return
+    if (this.isPlaying()) {
+      const { position } = this.getTimeline()
+      this.pausedAt = position
+      this.stopSourceOnly()
+      this.playDuration = 0
+      return
+    }
+    const t = this.pausedAt
+    if (t == null || t >= this.buffer.duration - 0.05) {
+      this.pausedAt = null
+      return
+    }
+    this.pausedAt = null
+    void this.resume()
+    this.startSource(this.buffer.duration - t, t)
+  }
+
   stop(): void {
+    this.pausedAt = null
     this.stopSourceOnly()
     this.playDuration = 0
   }
@@ -263,6 +294,7 @@ export class AudioEngine {
   }
 
   private startSource(dur: number, offset = this.energyStart): void {
+    this.pausedAt = null
     this.stopSourceOnly()
     if (!this.buffer) return
     const ctx = this.getContext()
