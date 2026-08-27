@@ -13,9 +13,6 @@ dist-ssr
 *.local
 tmp-*.png
 
-# Local smoke-test audio (copyrighted; keep off GitHub)
-fixtures/sample-pack/
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

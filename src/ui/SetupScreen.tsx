@@ -10,6 +10,7 @@ import {
   verifyPermission,
 } from '../files/loadFolder'
 import { VolumeControl } from './VolumeControl'
+import { ROUND_OPTIONS, type RoundLimit } from '../game/rules'
 import type { Player, Track } from '../types'
 
 interface SetupScreenProps {
@@ -19,7 +20,7 @@ interface SetupScreenProps {
   onTracksLoaded: (tracks: Track[]) => void
   onAddPlayer: (name: string) => void
   onRemovePlayer: (id: string) => void
-  onStart: () => void
+  onStart: (roundLimit: RoundLimit) => void
 }
 
 function StepHeading({ index, title, note }: { index: string; title: string; note?: string }) {
@@ -48,8 +49,16 @@ export function SetupScreen({
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [playerInput, setPlayerInput] = useState('')
+  const [roundLimit, setRoundLimit] = useState<RoundLimit>(20)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canPick = supportsDirectoryPicker()
+
+  const sessionCount =
+    tracks.length === 0
+      ? 0
+      : roundLimit === 'all'
+        ? tracks.length
+        : Math.min(roundLimit, tracks.length)
 
   async function handlePickFolder() {
     setLoading(true)
@@ -152,7 +161,15 @@ export function SetupScreen({
         </header>
 
       <section className="panel">
-        <StepHeading index="01" title="Music folder" />
+        <StepHeading
+          index="01"
+          title="Music folder"
+          note={
+            canPick
+              ? undefined
+              : 'This browser can’t remember folders — you’ll pick again after a refresh. Chrome or Edge remember the last folder.'
+          }
+        />
         <div className="button-row">
           {canPick ? (
             <>
@@ -171,6 +188,14 @@ export function SetupScreen({
                 disabled={loading}
               >
                 Reload last folder
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-lg"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+              >
+                Choose files…
               </button>
             </>
           ) : (
@@ -192,12 +217,6 @@ export function SetupScreen({
             accept="audio/*,.mp3,.m4a,.wav,.flac,.ogg,.opus"
             onChange={(e) => void handleFallbackFiles(e.target.files)}
           />
-          {!canPick && (
-            <p className="hint">
-              This browser needs the folder picker fallback — Chrome or Edge works best for
-              remembering the folder.
-            </p>
-          )}
         </div>
         <p className={`status ${tracks.length ? 'status-ok' : ''}`} aria-live="polite">
           {status ?? (tracks.length ? `${tracks.length} tracks ready.` : 'No folder loaded yet.')}
@@ -239,7 +258,36 @@ export function SetupScreen({
       </section>
 
       <section className="panel start-panel">
-        <StepHeading index="03" title="Fire it up" />
+        <StepHeading
+          index="03"
+          title="Fire it up"
+          note={
+            tracks.length
+              ? `Playing ${sessionCount} of ${tracks.length} track${tracks.length === 1 ? '' : 's'} (shuffled).`
+              : undefined
+          }
+        />
+        <div
+          className="round-options"
+          role="group"
+          aria-label="How many rounds"
+        >
+          {ROUND_OPTIONS.map((opt) => {
+            const label = opt === 'all' ? 'All' : String(opt)
+            const selected = roundLimit === opt
+            return (
+              <button
+                key={label}
+                type="button"
+                className={`btn btn-lg round-option ${selected ? 'is-selected' : 'btn-ghost'}`}
+                aria-pressed={selected}
+                onClick={() => setRoundLimit(opt)}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
         <div className="button-row">
           <button
             type="button"
@@ -247,7 +295,7 @@ export function SetupScreen({
             disabled={tracks.length === 0 || loading}
             onClick={() => {
               enterFullscreen()
-              onStart()
+              onStart(roundLimit)
             }}
           >
             Start game

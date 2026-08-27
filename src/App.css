@@ -142,22 +142,23 @@ input {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: safe center;
   max-width: none;
   width: 100%;
+  padding-block: clamp(0.65rem, 1.8vh, 1.25rem);
 }
 
 .setup-stack {
-  width: min(44rem, 100%);
-  margin-block: auto;
+  width: min(42rem, 100%);
 }
 
 /* ——— Brand ——— */
 .setup-header {
-  margin-bottom: 2.25rem;
-  padding-bottom: 1.75rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.7rem;
   border-bottom: 1px solid color-mix(in srgb, var(--walnut-light) 25%, #000);
   display: grid;
-  gap: 1.25rem;
+  gap: 0.5rem;
 }
 
 .eyebrow {
@@ -171,8 +172,8 @@ input {
 
 .setup-header h1 {
   font-family: var(--font-display);
-  font-size: clamp(3.2rem, 8vw, 5.2rem);
-  line-height: 1;
+  font-size: clamp(2.55rem, 5.5vw, 3.85rem);
+  line-height: 0.95;
   margin: 0;
   font-weight: 600;
   font-variation-settings: 'SOFT' 40, 'WONK' 1, 'opsz' 144;
@@ -308,11 +309,69 @@ h2 {
   box-shadow: var(--shadow), inset 0 1px 0 rgba(243, 230, 212, 0.05);
 }
 
+.setup-screen .panel {
+  padding: clamp(0.95rem, 1.8vw, 1.25rem);
+  margin-bottom: 0.7rem;
+}
+
+.setup-screen .step-heading {
+  margin: 0 0 0.75rem;
+  grid-template-columns: 3.4rem 1fr;
+  gap: 0.65rem 1rem;
+}
+
+.setup-screen .step-index {
+  font-size: 1.35rem;
+}
+
+.setup-screen .step-copy h2 {
+  font-size: clamp(1.25rem, 2.2vw, 1.55rem);
+  margin: 0 0 0.2rem;
+}
+
+.setup-screen .step-note {
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.setup-screen .round-options {
+  margin: 0 0 0.7rem;
+  gap: 0.5rem;
+}
+
+.setup-screen .btn-lg {
+  padding: 0.72rem 1.25rem;
+  font-size: 0.92rem;
+}
+
+.setup-screen .status {
+  margin-top: 0.65rem;
+  font-size: 0.95rem;
+}
+
+.setup-screen .player-chips {
+  margin-top: 0.65rem;
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
+}
+
+.round-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  margin: 0 0 1rem;
+}
+
+.round-option.is-selected {
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--sunset-hot), var(--sunset));
+  border-color: color-mix(in srgb, var(--sunset-ember) 55%, #000);
 }
 
 .volume-control {
@@ -640,8 +699,6 @@ h2 {
   height: 1px; /* row sizes to content; 100% children fill that height */
   border-collapse: separate;
   border-spacing: 1rem 0;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--walnut-light) 22%, #000);
 }
 
 .play-brand,
@@ -673,6 +730,8 @@ h2 {
 
 .play-score-slot .scoreboard {
   height: 100%;
+  width: max-content;
+  max-width: 100%;
   box-sizing: border-box;
   flex-wrap: nowrap;
   white-space: nowrap;
@@ -730,7 +789,7 @@ h2 {
   background: linear-gradient(180deg, rgba(26, 16, 10, 0.95), rgba(5, 4, 3, 0.98));
   border: 1px solid color-mix(in srgb, var(--walnut-light) 30%, #000);
   border-radius: 8px;
-  min-width: 12rem;
+  width: max-content;
   justify-content: flex-end;
   align-items: center;
   align-content: center;

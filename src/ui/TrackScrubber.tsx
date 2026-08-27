@@ -58,7 +58,7 @@ export function TrackScrubber({ active }: { active: boolean }) {
   const [position, setPosition] = useState(() => audioEngine.getTimeline().position)
   const [duration, setDuration] = useState(() => audioEngine.getTimeline().duration)
   const [barCount, setBarCount] = useState(160)
-  const [envelope, setEnvelope] = useState(() => new Float32Array(0))
+  const [envelope, setEnvelope] = useState<Float32Array>(() => new Float32Array(0))
 
   useEffect(() => {
     const el = trackRef.current

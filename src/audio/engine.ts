@@ -98,18 +98,10 @@ export class AudioEngine {
     if (this.prepared?.key === prepared.key) this.prepared = null
   }
 
-  /**
-   * Decode `file` and make it the current buffer.
-   * holdPlayback: keep the current source going until the new buffer is ready
-   * (used when leaving a reveal so the 15s clip isn’t cut for decode).
-   */
-  async loadFile(
-    file: File,
-    key: string,
-    opts: { holdPlayback?: boolean } = {},
-  ): Promise<{ duration: number; energyStart: number }> {
+  /** Decode `file` and make it the current buffer (stops any current playback). */
+  async loadFile(file: File, key: string): Promise<{ duration: number; energyStart: number }> {
     if (this.currentKey === key && this.buffer) {
-      if (!opts.holdPlayback) this.stop()
+      this.stop()
       return { duration: this.buffer.duration, energyStart: this.energyStart }
     }
 
@@ -121,7 +113,7 @@ export class AudioEngine {
       return { duration: ready.buffer.duration, energyStart: ready.energyStart }
     }
 
-    if (!opts.holdPlayback) this.stop()
+    this.stop()
     const decoded = await this.decodeFile(file)
     this.activate({ key, ...decoded })
     return { duration: decoded.buffer.duration, energyStart: decoded.energyStart }

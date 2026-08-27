@@ -5,7 +5,8 @@ import {
   clipDuration,
   nextSkipIndex,
   pointsForSkipIndex,
-  shuffleTracks,
+  buildSessionQueue,
+  type RoundLimit,
 } from './rules'
 import { createTrackSearcher } from './search'
 import type { GameState, Player, Track } from '../types'
@@ -25,7 +26,6 @@ const initialState: GameState = {
   roundIndex: 0,
   currentTrack: null,
   skipIndex: 0,
-  energyStart: 0,
   players: [],
   lastPoints: 0,
   lastCorrect: false,
@@ -75,7 +75,7 @@ export function useGame() {
   }, [])
 
   const startRound = useCallback(
-    async (queue: Track[], roundIndex: number, players: Player[], holdPlayback = false) => {
+    async (queue: Track[], roundIndex: number, players: Player[]) => {
       const gen = ++loadGen.current
 
       if (roundIndex >= queue.length) {
@@ -107,14 +107,11 @@ export function useGame() {
 
       try {
         await audioEngine.resume()
-        const { energyStart } = await audioEngine.loadFile(track.file, track.id, {
-          holdPlayback,
-        })
+        await audioEngine.loadFile(track.file, track.id)
         if (gen !== loadGen.current) return
         audioEngine.playClip(clipDuration(0))
         setState((s) => ({
           ...s,
-          energyStart,
           loadingRound: false,
         }))
         prefetchUpcoming(queue, roundIndex)
@@ -128,20 +125,20 @@ export function useGame() {
         }))
         window.setTimeout(() => {
           if (gen !== loadGen.current) return
-          void startRound(queue, roundIndex + 1, players, false)
+          void startRound(queue, roundIndex + 1, players)
         }, 800)
       }
     },
     [],
   )
 
-  const beginGame = useCallback(() => {
+  const beginGame = useCallback((roundLimit: RoundLimit = 'all') => {
     const s = stateRef.current
     if (s.tracks.length === 0) {
       setState((prev) => ({ ...prev, error: 'Load a music folder first.' }))
       return
     }
-    const queue = shuffleTracks(s.tracks)
+    const queue = buildSessionQueue(s.tracks, roundLimit)
     const players = s.players.map((p) => ({ ...p, score: 0 }))
     setState((prev) => ({
       ...prev,
@@ -153,7 +150,7 @@ export function useGame() {
       error: null,
       loadingRound: true,
     }))
-    void startRound(queue, 0, players, false)
+    void startRound(queue, 0, players)
   }, [startRound])
 
   const replay = useCallback(() => {
@@ -245,7 +242,7 @@ export function useGame() {
     const s = stateRef.current
     audioEngine.stop()
     setState((prev) => ({ ...prev, loadingRound: true }))
-    void startRound(s.queue, s.roundIndex + 1, s.players, false)
+    void startRound(s.queue, s.roundIndex + 1, s.players)
   }, [startRound])
 
   const awardPlayer = useCallback((playerId: string) => {
@@ -257,7 +254,7 @@ export function useGame() {
     stateRef.current = { ...s, players }
     audioEngine.stop()
     setState((prev) => ({ ...prev, players, loadingRound: true }))
-    void startRound(s.queue, s.roundIndex + 1, players, false)
+    void startRound(s.queue, s.roundIndex + 1, players)
   }, [startRound])
 
   const skipTrack = useCallback(() => {
@@ -267,7 +264,7 @@ export function useGame() {
     const next = { ...s, roundIndex: nextIndex, loadingRound: true, error: null }
     stateRef.current = next
     setState(next)
-    void startRound(s.queue, nextIndex, s.players, false)
+    void startRound(s.queue, nextIndex, s.players)
   }, [startRound])
 
   const backToSetup = useCallback(() => {

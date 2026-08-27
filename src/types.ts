@@ -22,7 +22,6 @@ export interface GameState {
   roundIndex: number
   currentTrack: Track | null
   skipIndex: number
-  energyStart: number
   players: Player[]
   lastPoints: number
   lastCorrect: boolean

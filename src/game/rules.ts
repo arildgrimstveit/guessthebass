@@ -6,6 +6,16 @@ export const POINTS_LADDER = [5, 4, 3, 2, 1] as const
 
 export const MAX_SKIPS = CLIP_LADDER.length // 5 skips → reveal
 
+/** How many shuffled tracks to play in a session. */
+export const ROUND_OPTIONS = [10, 20, 40, 'all'] as const
+export type RoundLimit = (typeof ROUND_OPTIONS)[number]
+
+export function buildSessionQueue<T>(tracks: T[], roundLimit: RoundLimit): T[] {
+  const shuffled = shuffleTracks(tracks)
+  if (roundLimit === 'all') return shuffled
+  return shuffled.slice(0, Math.min(roundLimit, shuffled.length))
+}
+
 export function clipDuration(skipIndex: number): number {
   const i = Math.min(Math.max(0, skipIndex), CLIP_LADDER.length - 1)
   return CLIP_LADDER[i]
