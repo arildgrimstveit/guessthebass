@@ -941,34 +941,24 @@ h2 {
 
 .play-main {
   flex: 1;
-  position: relative;
-  display: block;
+  min-height: 0;
   padding: 0;
 }
 
 .play-main .lede {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
   margin: 0;
-  z-index: 2;
 }
 
 .search-anchor {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(920px, calc(100vw - 2 * var(--safe)));
-  z-index: 3;
+  position: relative;
+  width: min(920px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.1rem;
 }
 
 .play-above {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 2.1rem);
-  transform: translateX(-50%);
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -1647,59 +1637,17 @@ h2 {
   gap: 0.55rem;
 }
 
-.is-mobile .play-main {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.is-mobile .play-main .lede {
-  position: static;
-  transform: none;
-  left: auto;
-  top: auto;
-}
-
-.is-mobile .search-anchor {
-  position: relative;
-  left: auto;
-  top: auto;
-  transform: none;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.is-mobile .play-above {
-  position: static;
-  left: auto;
-  bottom: auto;
-  transform: none;
-  width: 100%;
-}
-
 .is-mobile .clip-label {
   font-size: clamp(2.4rem, 14vw, 4.2rem);
 }
 
-.is-mobile .search-block {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
-  margin-top: auto;
-  padding-top: 0.35rem;
-  background: linear-gradient(180deg, transparent, rgba(5, 4, 3, 0.92) 28%);
+.is-mobile .search-anchor {
+  width: 100%;
+  gap: 0.75rem;
 }
 
 .is-mobile .search-menu {
-  top: auto;
-  bottom: calc(100% + 0.4rem);
-  max-height: min(36vh, 16rem);
+  max-height: min(42vh, 18rem);
 }
 
 .is-mobile .setup-stack {
