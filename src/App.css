@@ -1063,6 +1063,10 @@ h2 {
   touch-action: none;
 }
 
+.track-scrubber-track.is-plain {
+  height: 1.15rem;
+}
+
 .track-scrubber-track:focus-visible {
   outline: 2px solid var(--sunset-ember);
   outline-offset: 4px;
@@ -1107,6 +1111,28 @@ h2 {
   width: 100cqw;
 }
 
+.track-scrubber-rail,
+.track-scrubber-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.track-scrubber-rail {
+  right: 0;
+  background: color-mix(in srgb, var(--walnut-light) 38%, #1a100a);
+}
+
+.track-scrubber-fill {
+  width: calc(var(--progress, 0) * 100%);
+  background: linear-gradient(90deg, var(--sunset), var(--sunset-hot));
+  z-index: 1;
+}
+
 .track-scrubber-head {
   position: absolute;
   top: 8%;
@@ -1119,6 +1145,14 @@ h2 {
   border-radius: 1px;
   pointer-events: none;
   z-index: 2;
+}
+
+.track-scrubber-canvas.is-plain .track-scrubber-head {
+  top: -2px;
+  bottom: -2px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
 }
 
 .track-scrubber-times {
@@ -1563,8 +1597,7 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     'brand host'
-    'score score'
-    'vol vol';
+    'score score';
   align-items: stretch;
   gap: 0.45rem;
 }
@@ -1598,18 +1631,9 @@ h2 {
   overflow-y: auto;
 }
 
+.is-mobile .volume-control,
 .is-mobile .play-vol-slot {
-  grid-area: vol;
-}
-
-.is-mobile .play-vol-slot .volume-control {
-  width: 100%;
-  min-height: 2.6rem;
-}
-
-.is-mobile .play-vol-slot .volume-control input[type='range'] {
-  flex: 1 1 auto;
-  width: auto;
+  display: none;
 }
 
 .is-mobile .play-end {

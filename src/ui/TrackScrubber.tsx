@@ -58,7 +58,7 @@ export function TrackScrubber({ active }: { active: boolean }) {
   const [position, setPosition] = useState(() => audioEngine.getTimeline().position)
   const [duration, setDuration] = useState(() => audioEngine.getTimeline().duration)
   const [barCount, setBarCount] = useState(160)
-  const [envelope, setEnvelope] = useState<Float32Array>(() => new Float32Array(0))
+  const [envelope, setEnvelope] = useState<Float32Array>(() => audioEngine.getWaveform(MIN_BARS))
 
   useEffect(() => {
     const el = trackRef.current
@@ -104,12 +104,13 @@ export function TrackScrubber({ active }: { active: boolean }) {
   }
 
   const progress = duration > 0 ? position / duration : 0
+  const plain = envelope.length < 1
 
   return (
     <div className="track-scrubber">
       <div
         ref={trackRef}
-        className="track-scrubber-track"
+        className={`track-scrubber-track${plain ? ' is-plain' : ''}`}
         role="slider"
         tabIndex={0}
         aria-label="Track position"
@@ -150,13 +151,22 @@ export function TrackScrubber({ active }: { active: boolean }) {
         }}
       >
         <div
-          className="track-scrubber-canvas"
+          className={`track-scrubber-canvas${plain ? ' is-plain' : ''}`}
           style={{ '--progress': progress } as CSSProperties}
         >
-          <WaveformLayer envelope={envelope} variant="dim" />
-          <div className="track-scrubber-played">
-            <WaveformLayer envelope={envelope} variant="played" />
-          </div>
+          {plain ? (
+            <>
+              <div className="track-scrubber-rail" />
+              <div className="track-scrubber-fill" />
+            </>
+          ) : (
+            <>
+              <WaveformLayer envelope={envelope} variant="dim" />
+              <div className="track-scrubber-played">
+                <WaveformLayer envelope={envelope} variant="played" />
+              </div>
+            </>
+          )}
           <div className="track-scrubber-head" />
         </div>
       </div>

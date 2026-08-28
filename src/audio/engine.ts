@@ -3,8 +3,10 @@ import { computeAmplitudeEnvelope } from './waveform'
 
 const VOLUME_KEY = 'gtb-volume'
 const ENVELOPE_BARS = 64
-/** decodeAudioData expands to PCM (~1GB for a 1hr mix). Skip analysis on anything bigger than a long song. */
-const MAX_DECODE_BYTES = 20 * 1024 * 1024
+/** PCM for a 1hr mix is ~1GB. File *size* is the wrong gate (a 4-minute WAV is already 40MB). */
+const MAX_ANALYZE_SECONDS = 10 * 60
+/** Prefetch cannot read duration cheaply; skip obvious DJ sets / yearmixes. */
+const MAX_PREFETCH_BYTES = 80 * 1024 * 1024
 
 function clampVolume(n: number): number {
   if (!Number.isFinite(n)) return 1
@@ -67,8 +69,10 @@ class AudioEngine {
   private currentKey: string | null = null
   private energyStart = 0
   private envelope: Float32Array | null = null
-  private playOffset = 0
   private playDuration = 0
+  /** 0 = not started yet (still seeking). Meter uses wall clock, not currentTime. */
+  private playOriginMs = 0
+  private runGen = 0
   private volume = readStoredVolume()
   private prepared: Analysis | null = null
   private prefetchGen = 0
@@ -135,7 +139,10 @@ class AudioEngine {
     this.stop()
 
     const el = this.attach(file)
-    const meta = waitMetadata(el)
+    await waitMetadata(el)
+    el.pause()
+    el.muted = false
+
     let energyStart = 0
     let envelope: Float32Array | null = null
 
@@ -143,15 +150,15 @@ class AudioEngine {
       energyStart = this.prepared.energyStart
       envelope = this.prepared.envelope
       this.prepared = null
-    } else if (file.size <= MAX_DECODE_BYTES) {
-      const analyzed = await this.analyze(file)
-      energyStart = analyzed.energyStart
-      envelope = analyzed.envelope
+    } else if (this.duration() > 0 && this.duration() <= MAX_ANALYZE_SECONDS) {
+      try {
+        const analyzed = await this.analyze(file)
+        energyStart = analyzed.energyStart
+        envelope = analyzed.envelope
+      } catch {
+        // still play; skip drop-find / waveform
+      }
     }
-
-    await meta
-    el.pause()
-    el.muted = false
 
     this.currentKey = key
     this.energyStart = energyStart
@@ -161,7 +168,7 @@ class AudioEngine {
   }
 
   prefetchFile(file: File, key: string): void {
-    if (!key || file.size > MAX_DECODE_BYTES) return
+    if (!key || file.size > MAX_PREFETCH_BYTES) return
     if (this.currentKey === key || this.prepared?.key === key || this.prefetchingKey === key) return
     const token = ++this.prefetchGen
     this.prefetchingKey = key
@@ -186,10 +193,10 @@ class AudioEngine {
 
   getPlaybackState(): { elapsed: number; duration: number; playing: boolean } {
     const duration = this.playDuration
-    const el = this.media
-    if (!el || duration <= 0) return { elapsed: 0, duration: 0, playing: false }
-    const elapsed = Math.min(Math.max(0, el.currentTime - this.playOffset), duration)
-    return { elapsed, duration, playing: this.isPlaying() }
+    if (duration <= 0) return { elapsed: 0, duration: 0, playing: false }
+    const elapsed = this.clipElapsed()
+    if (elapsed >= duration) this.stopClipAudio()
+    return { elapsed, duration, playing: elapsed < duration && this.isPlaying() }
   }
 
   getTimeline(): { position: number; duration: number; playing: boolean } {
@@ -228,11 +235,11 @@ class AudioEngine {
     const offset = this.energyStart
     const dur = Math.min(durationSeconds, Math.max(0.01, total - offset))
 
-    if (mode === 'extend' && this.isPlaying() && this.media) {
+    if (mode === 'extend' && this.isPlaying()) {
       this.playDuration = dur
       this.clearClipTimer()
-      const remaining = dur - (this.media.currentTime - this.playOffset)
-      if (remaining <= 0) this.media.pause()
+      const remaining = dur - this.clipElapsed()
+      if (remaining <= 0) this.stopClipAudio()
       else this.armClipTimer(remaining)
       return
     }
@@ -282,7 +289,7 @@ class AudioEngine {
 
   private async analyze(file: File): Promise<{ energyStart: number; envelope: Float32Array }> {
     const ctx = this.getContext()
-    const audioBuffer = await ctx.decodeAudioData((await file.arrayBuffer()).slice(0))
+    const audioBuffer = await ctx.decodeAudioData(await file.slice(0).arrayBuffer())
     return {
       energyStart: findEnergyStart(audioBuffer),
       envelope: computeAmplitudeEnvelope(audioBuffer, ENVELOPE_BARS),
@@ -310,25 +317,75 @@ class AudioEngine {
     const el = this.media
     const total = this.duration()
     if (!el || total <= 0) return
+    const gen = ++this.runGen
     this.clearClipTimer()
     const t = Math.min(Math.max(0, offset), Math.max(0, total - 0.05))
     const playDur = Math.min(duration, Math.max(0.01, total - t))
+    this.playDuration = playDur
+    this.playOriginMs = 0
     el.volume = this.volume
+    el.pause()
+
+    const start = () => {
+      if (gen !== this.runGen) return
+      const beginClock = () => {
+        if (gen !== this.runGen || this.playOriginMs > 0) return
+        this.playOriginMs = performance.now()
+        if (clip && t + playDur < total - 0.05) this.armClipTimer(playDur)
+      }
+      el.addEventListener('playing', beginClock, { once: true })
+      void el.play().then(beginClock).catch(() => undefined)
+    }
+
+    this.whenSeeked(el, t, start)
+  }
+
+  private whenSeeked(el: HTMLAudioElement, t: number, then: () => void): void {
+    const gen = this.runGen
+    let settled = false
+    const go = () => {
+      if (settled || gen !== this.runGen) return
+      settled = true
+      then()
+    }
+    if (Number.isFinite(el.currentTime) && Math.abs(el.currentTime - t) < 0.04) {
+      go()
+      return
+    }
+    const onSeeked = () => {
+      el.removeEventListener('seeked', onSeeked)
+      go()
+    }
+    el.addEventListener('seeked', onSeeked)
     try {
       el.currentTime = t
     } catch {
-      // not seekable yet
+      el.removeEventListener('seeked', onSeeked)
+      go()
+      return
     }
-    void el.play().catch(() => undefined)
-    this.playOffset = t
-    this.playDuration = playDur
-    if (clip && t + playDur < total - 0.05) this.armClipTimer(playDur)
+    window.setTimeout(() => {
+      el.removeEventListener('seeked', onSeeked)
+      go()
+    }, 120)
+  }
+
+  private clipElapsed(): number {
+    if (this.playDuration <= 0 || this.playOriginMs <= 0) return 0
+    return Math.min(Math.max(0, (performance.now() - this.playOriginMs) / 1000), this.playDuration)
+  }
+
+  private stopClipAudio(): void {
+    this.clearClipTimer()
+    this.media?.pause()
   }
 
   private pause(): void {
+    this.runGen += 1
     this.clearClipTimer()
     this.media?.pause()
     this.playDuration = 0
+    this.playOriginMs = 0
   }
 
   private isPlaying(): boolean {
@@ -339,7 +396,7 @@ class AudioEngine {
     this.clearClipTimer()
     this.clipTimer = window.setTimeout(() => {
       this.clipTimer = null
-      this.media?.pause()
+      this.stopClipAudio()
     }, Math.max(0, seconds * 1000))
   }
 
