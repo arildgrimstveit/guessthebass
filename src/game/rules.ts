@@ -10,6 +10,11 @@ export const MAX_SKIPS = CLIP_LADDER.length // 5 skips → reveal
 export const ROUND_OPTIONS = [10, 20, 40, 'all'] as const
 export type RoundLimit = (typeof ROUND_OPTIONS)[number]
 
+/** Worst-case Latin cap run that must fit one award-button line. */
+export const MAX_PLAYER_NAME_LENGTH = 12
+
+export const MAX_PLAYERS = 20
+
 export function buildSessionQueue<T>(tracks: T[], roundLimit: RoundLimit): T[] {
   const shuffled = shuffleTracks(tracks)
   if (roundLimit === 'all') return shuffled
@@ -62,7 +67,7 @@ export function willRevealNext(skipIndex: number): boolean {
   return nextSkipIndex(skipIndex).reveal
 }
 
-export function shuffleTracks<T>(items: T[]): T[] {
+function shuffleTracks<T>(items: T[]): T[] {
   const arr = [...items]
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))

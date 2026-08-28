@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   CLIP_LADDER,
+  MAX_PLAYER_NAME_LENGTH,
   MAX_SKIPS,
   clipDuration,
   formatClipLabel,
@@ -12,7 +13,7 @@ import { TrackScrubber } from './TrackScrubber'
 import { VolumeControl } from './VolumeControl'
 import { audioEngine } from '../audio/engine'
 import type { SearchHit } from '../game/search'
-import type { GameState, Track } from '../types'
+import type { GameState, Player, Track } from '../types'
 
 interface PlayScreenProps {
   state: GameState
@@ -128,30 +129,12 @@ export function PlayScreen({
   const revealNext = willRevealNext(state.skipIndex)
 
   if (state.phase === 'finished') {
-    const ranked = [...state.players].sort((a, b) => b.score - a.score)
     return (
-      <div className="screen play-screen">
-        <Scoreboard players={state.players} />
-        <div className="center-stage">
-          <p className="eyebrow">Session over</p>
-          <h1>That’s the set</h1>
-          {ranked.length > 0 ? (
-            <ol className="final-scores">
-              {ranked.map((p, i) => (
-                <li key={p.id}>
-                  <span className="place">{i + 1}.</span> {p.name}{' '}
-                  <strong>{p.score} pts</strong>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="lede">Nice ears. Load another folder or run it back.</p>
-          )}
-          <button type="button" className="btn btn-primary btn-xl" onClick={onBackToSetup}>
-            Back to setup
-          </button>
-        </div>
-      </div>
+      <FinishScreen
+        players={state.players}
+        rounds={state.queue.length}
+        onBackToSetup={onBackToSetup}
+      />
     )
   }
 
@@ -286,18 +269,7 @@ export function PlayScreen({
           <TrackScrubber active />
           {state.lastCorrect && state.players.length > 0 ? (
             <>
-              <div className="award-grid">
-                {state.players.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className="btn btn-primary btn-xl award-btn"
-                    onClick={() => onAward(p.id)}
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
+              <AwardGrid players={state.players} onAward={onAward} />
               <button type="button" className="btn btn-ghost btn-lg" onClick={onNext}>
                 Nobody / skip
               </button>
@@ -313,12 +285,130 @@ export function PlayScreen({
   )
 }
 
+function AwardGrid({
+  players,
+  onAward,
+}: {
+  players: Player[]
+  onAward: (playerId: string) => void
+}) {
+  const sizerRef = useRef<HTMLSpanElement>(null)
+  const [colMin, setColMin] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    const el = sizerRef.current
+    if (!el) return
+
+    const apply = () => setColMin(el.offsetWidth)
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(el)
+    void document.fonts.ready.then(apply)
+    return () => ro.disconnect()
+  }, [])
+
+  return (
+    <div
+      className="award-grid"
+      style={
+        colMin != null
+          ? ({ '--award-col-min': `${colMin}px` } as CSSProperties)
+          : undefined
+      }
+    >
+      <span ref={sizerRef} className="award-sizer" aria-hidden="true">
+        {'W'.repeat(MAX_PLAYER_NAME_LENGTH)}
+      </span>
+      {players.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          className="btn btn-primary btn-xl award-btn"
+          onClick={() => onAward(p.id)}
+          title={p.name}
+        >
+          {p.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function rankByScore(players: Player[]) {
+  const sorted = [...players].sort((a, b) => b.score - a.score)
+  let place = 1
+  return sorted.map((player, i) => {
+    if (i > 0 && sorted[i - 1].score !== player.score) place = i + 1
+    return { player, place }
+  })
+}
+
+function FinishScreen({
+  players,
+  rounds,
+  onBackToSetup,
+}: {
+  players: Player[]
+  rounds: number
+  onBackToSetup: () => void
+}) {
+  const ranked = rankByScore(players)
+  const topScore = ranked[0]?.player.score ?? 0
+
+  return (
+    <div className="screen finish-screen">
+      <div className="finish-stage">
+        <header className="finish-header">
+          <p className="eyebrow">Session over</p>
+          <h1 className="finish-title">That’s the set</h1>
+          {rounds > 0 ? (
+            <p className="finish-meta">
+              {rounds} round{rounds === 1 ? '' : 's'}
+              {ranked.length
+                ? ` · ${ranked.length} player${ranked.length === 1 ? '' : 's'}`
+                : ''}
+            </p>
+          ) : null}
+        </header>
+
+        {ranked.length > 0 ? (
+          <div className="finish-board-frame">
+            <ol className="finish-board themed-scroll" aria-label="Final scores">
+              {ranked.map(({ player, place }) => {
+                const lead = topScore > 0 && place === 1
+                const bar = topScore > 0 ? (player.score / topScore) * 100 : 0
+                return (
+                  <li key={player.id} className={lead ? 'is-first' : undefined}>
+                    <span className="finish-bar" style={{ width: `${bar}%` }} aria-hidden="true" />
+                    <span className="finish-place">{String(place).padStart(2, '0')}</span>
+                    <span className="finish-name">{player.name}</span>
+                    <span className="finish-pts">
+                      {player.score}
+                      <span className="finish-pts-label">pts</span>
+                    </span>
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+        ) : (
+          <p className="lede">Nice ears. Load another folder or run it back.</p>
+        )}
+
+        <button type="button" className="btn btn-primary btn-xl" onClick={onBackToSetup}>
+          Back to setup
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Scoreboard({ players }: { players: GameState['players'] }) {
   if (!players.length) return <div className="scoreboard empty" />
   const sorted = [...players].sort((a, b) => b.score - a.score)
   const dense = sorted.length > 6
   return (
-    <ul className={`scoreboard${dense ? ' scoreboard-dense' : ''}`}>
+    <ul className={`scoreboard themed-scroll${dense ? ' scoreboard-dense' : ''}`}>
       {sorted.map((p) => (
         <li key={p.id}>
           <span className="sb-name">{p.name}</span>

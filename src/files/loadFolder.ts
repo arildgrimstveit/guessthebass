@@ -6,12 +6,21 @@ const HANDLE_KEY = 'gtb-directory-handle'
 
 const AUDIO_EXT = new Set(['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'webm'])
 
-export function isAudioFileName(name: string): boolean {
+const YIELD_EVERY = 16
+const REPORT_MS = 70
+
+export type FolderLoadProgress = {
+  phase: 'scan' | 'read'
+  done: number
+  total: number
+}
+
+function isAudioFileName(name: string): boolean {
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
   return AUDIO_EXT.has(ext)
 }
 
-export function parseFilenameMeta(filename: string): { artist: string; title: string } {
+function parseFilenameMeta(filename: string): { artist: string; title: string } {
   const base = filename.replace(/\.[^.]+$/, '')
   // Common: "Artist - Title" or "Artist – Title"
   const parts = base.split(/\s[-–—]\s/)
@@ -53,16 +62,48 @@ async function fileToTrack(file: File, path: string, index: number): Promise<Tra
   }
 }
 
+function yieldToUi(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0)
+  })
+}
+
+function createProgress(onProgress?: (p: FolderLoadProgress) => void) {
+  let lastEmit = 0
+  let ticks = 0
+
+  const emit = (p: FolderLoadProgress, force = false) => {
+    if (!onProgress) return
+    const now = performance.now()
+    if (!force && now - lastEmit < REPORT_MS) return
+    lastEmit = now
+    onProgress(p)
+  }
+
+  const pulse = async (p: FolderLoadProgress) => {
+    ticks += 1
+    const finished = p.phase === 'read' && p.total > 0 && p.done >= p.total
+    if (finished || ticks % YIELD_EVERY === 0) {
+      emit(p, true)
+      await yieldToUi()
+      return
+    }
+    emit(p)
+  }
+
+  return { emit, pulse }
+}
+
 async function walkDirectory(
   dir: FileSystemDirectoryHandle,
   path: string,
   out: { file: File; path: string }[],
+  onEntry: (found: number) => Promise<void>,
 ): Promise<void> {
   for await (const [name, handle] of dir) {
     if (handle.kind === 'file') {
-      const fileHandle = handle as FileSystemFileHandle
-      const file = await fileHandle.getFile()
       if (isAudioFileName(name)) {
+        const file = await (handle as FileSystemFileHandle).getFile()
         out.push({ file, path: path ? `${path}/${name}` : name })
       }
     } else if (handle.kind === 'directory') {
@@ -70,39 +111,55 @@ async function walkDirectory(
         handle as FileSystemDirectoryHandle,
         path ? `${path}/${name}` : name,
         out,
+        onEntry,
       )
     }
+    await onEntry(out.length)
   }
 }
 
-export async function loadTracksFromDirectoryHandle(
-  handle: FileSystemDirectoryHandle,
+async function readCollected(
+  collected: { file: File; path: string }[],
+  progress: ReturnType<typeof createProgress>,
 ): Promise<Track[]> {
-  const collected: { file: File; path: string }[] = []
-  await walkDirectory(handle, '', collected)
+  const total = collected.length
+  progress.emit({ phase: 'read', done: 0, total }, true)
   const tracks: Track[] = []
   for (let i = 0; i < collected.length; i++) {
     const item = collected[i]
     const track = await fileToTrack(item.file, item.path, i)
     if (track) tracks.push(track)
+    await progress.pulse({ phase: 'read', done: i + 1, total })
   }
   tracks.sort((a, b) => a.path.localeCompare(b.path))
   return tracks
 }
 
-export async function loadTracksFromFileList(files: FileList | File[]): Promise<Track[]> {
-  const list = Array.from(files)
-  const tracks: Track[] = []
-  let i = 0
-  for (const file of list) {
-    // webkitRelativePath gives nested path when using directory input
-    const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
+export async function loadTracksFromDirectoryHandle(
+  handle: FileSystemDirectoryHandle,
+  onProgress?: (p: FolderLoadProgress) => void,
+): Promise<Track[]> {
+  const progress = createProgress(onProgress)
+  const collected: { file: File; path: string }[] = []
+  progress.emit({ phase: 'scan', done: 0, total: 0 }, true)
+  await walkDirectory(handle, '', collected, (found) =>
+    progress.pulse({ phase: 'scan', done: found, total: 0 }),
+  )
+  return readCollected(collected, progress)
+}
+
+export async function loadTracksFromFileList(
+  files: FileList | File[],
+  onProgress?: (p: FolderLoadProgress) => void,
+): Promise<Track[]> {
+  const progress = createProgress(onProgress)
+  const collected: { file: File; path: string }[] = []
+  for (const file of Array.from(files)) {
     if (!isAudioFileName(file.name)) continue
-    const track = await fileToTrack(file, path, i++)
-    if (track) tracks.push(track)
+    const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
+    collected.push({ file, path })
   }
-  tracks.sort((a, b) => a.path.localeCompare(b.path))
-  return tracks
+  return readCollected(collected, progress)
 }
 
 export function supportsDirectoryPicker(): boolean {

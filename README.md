@@ -41,7 +41,7 @@ Open the app, pick a music folder, optionally add players, then start.
 
 Host buttons: **Play**, **Extend** / **Reveal**, **Skip track**, **End**.
 
-## Architecture (short)
+## Architecture
 
 Client-only Vite + React SPA. No server, auth, or song catalog.
 
@@ -70,7 +70,3 @@ npm run build        # production build → dist/
 npm run preview      # serve dist
 npm run lint         # oxlint
 ```
-
-## Possible next (not built)
-
-- Tune clip ladders / difficulty presets for easy vs hard nights.

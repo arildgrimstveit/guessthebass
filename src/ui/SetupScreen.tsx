@@ -8,9 +8,10 @@ import {
   saveDirectoryHandle,
   supportsDirectoryPicker,
   verifyPermission,
+  type FolderLoadProgress,
 } from '../files/loadFolder'
 import { VolumeControl } from './VolumeControl'
-import { ROUND_OPTIONS, type RoundLimit } from '../game/rules'
+import { ROUND_OPTIONS, MAX_PLAYER_NAME_LENGTH, MAX_PLAYERS, type RoundLimit } from '../game/rules'
 import type { Player, Track } from '../types'
 
 interface SetupScreenProps {
@@ -21,6 +22,14 @@ interface SetupScreenProps {
   onAddPlayer: (name: string) => void
   onRemovePlayer: (id: string) => void
   onStart: (roundLimit: RoundLimit) => void
+}
+
+function folderLoadLabel(p: FolderLoadProgress): string {
+  if (p.phase === 'scan') {
+    return p.done > 0 ? `Scanning… ${p.done}` : 'Scanning…'
+  }
+  if (p.total > 0) return `Reading ${p.done} / ${p.total}`
+  return 'Loading…'
 }
 
 function StepHeading({ index, title, note }: { index: string; title: string; note?: string }) {
@@ -47,11 +56,13 @@ export function SetupScreen({
   onStart,
 }: SetupScreenProps) {
   const [loading, setLoading] = useState(false)
+  const [loadProgress, setLoadProgress] = useState<FolderLoadProgress | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [playerInput, setPlayerInput] = useState('')
   const [roundLimit, setRoundLimit] = useState<RoundLimit>(20)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canPick = supportsDirectoryPicker()
+  const atPlayerCap = players.length >= MAX_PLAYERS
 
   const sessionCount =
     tracks.length === 0
@@ -62,6 +73,7 @@ export function SetupScreen({
 
   async function handlePickFolder() {
     setLoading(true)
+    setLoadProgress(null)
     setStatus(null)
     try {
       const handle = await pickDirectory()
@@ -71,7 +83,8 @@ export function SetupScreen({
         return
       }
       await saveDirectoryHandle(handle)
-      const loaded = await loadTracksFromDirectoryHandle(handle)
+      setLoadProgress({ phase: 'scan', done: 0, total: 0 })
+      const loaded = await loadTracksFromDirectoryHandle(handle, setLoadProgress)
       onTracksLoaded(loaded)
       setStatus(
         loaded.length
@@ -86,11 +99,13 @@ export function SetupScreen({
       }
     } finally {
       setLoading(false)
+      setLoadProgress(null)
     }
   }
 
   async function handleReloadSaved() {
     setLoading(true)
+    setLoadProgress(null)
     setStatus(null)
     try {
       const handle = await loadSavedDirectoryHandle()
@@ -104,22 +119,25 @@ export function SetupScreen({
         await clearSavedDirectoryHandle()
         return
       }
-      const loaded = await loadTracksFromDirectoryHandle(handle)
+      setLoadProgress({ phase: 'scan', done: 0, total: 0 })
+      const loaded = await loadTracksFromDirectoryHandle(handle, setLoadProgress)
       onTracksLoaded(loaded)
       setStatus(`Reloaded ${loaded.length} track${loaded.length === 1 ? '' : 's'}.`)
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Could not reload folder.')
     } finally {
       setLoading(false)
+      setLoadProgress(null)
     }
   }
 
   async function handleFallbackFiles(files: FileList | null) {
     if (!files?.length) return
     setLoading(true)
+    setLoadProgress({ phase: 'read', done: 0, total: 0 })
     setStatus(null)
     try {
-      const loaded = await loadTracksFromFileList(files)
+      const loaded = await loadTracksFromFileList(files, setLoadProgress)
       onTracksLoaded(loaded)
       setStatus(
         loaded.length
@@ -130,12 +148,13 @@ export function SetupScreen({
       setStatus(err instanceof Error ? err.message : 'Could not read files.')
     } finally {
       setLoading(false)
+      setLoadProgress(null)
     }
   }
 
   function handleAddPlayer(e: FormEvent) {
     e.preventDefault()
-    if (!playerInput.trim()) return
+    if (!playerInput.trim() || players.length >= MAX_PLAYERS) return
     onAddPlayer(playerInput)
     setPlayerInput('')
   }
@@ -218,9 +237,30 @@ export function SetupScreen({
             onChange={(e) => void handleFallbackFiles(e.target.files)}
           />
         </div>
-        <p className={`status ${tracks.length ? 'status-ok' : ''}`} aria-live="polite">
-          {status ?? (tracks.length ? `${tracks.length} tracks ready.` : 'No folder loaded yet.')}
+        <p
+          className={`status ${!loading && tracks.length ? 'status-ok' : ''}`}
+          aria-live={loading ? 'off' : 'polite'}
+        >
+          {loading && loadProgress
+            ? folderLoadLabel(loadProgress)
+            : (status ??
+              (tracks.length ? `${tracks.length} tracks ready.` : 'No folder loaded yet.'))}
         </p>
+        {loading && loadProgress?.phase === 'read' && loadProgress.total > 0 ? (
+          <div
+            className="folder-load-bar"
+            role="progressbar"
+            aria-label="Loading tracks"
+            aria-valuemin={0}
+            aria-valuemax={loadProgress.total}
+            aria-valuenow={loadProgress.done}
+          >
+            <div
+              className="folder-load-bar-fill"
+              style={{ width: `${(loadProgress.done / loadProgress.total) * 100}%` }}
+            />
+          </div>
+        ) : null}
         {error && <p className="status status-error">{error}</p>}
       </section>
 
@@ -231,10 +271,11 @@ export function SetupScreen({
             className="input input-lg"
             value={playerInput}
             onChange={(e) => setPlayerInput(e.target.value)}
-            placeholder="Player name"
-            maxLength={24}
+            placeholder={atPlayerCap ? `${MAX_PLAYERS} players max` : 'Player name'}
+            maxLength={MAX_PLAYER_NAME_LENGTH}
+            disabled={atPlayerCap}
           />
-          <button type="submit" className="btn btn-secondary btn-lg">
+          <button type="submit" className="btn btn-secondary btn-lg" disabled={atPlayerCap}>
             Add
           </button>
         </form>

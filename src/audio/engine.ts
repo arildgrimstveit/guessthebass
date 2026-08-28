@@ -24,7 +24,7 @@ type Prepared = {
   energyStart: number
 }
 
-export class AudioEngine {
+class AudioEngine {
   private ctx: AudioContext | null = null
   private gain: GainNode | null = null
   private buffer: AudioBuffer | null = null

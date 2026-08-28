@@ -6,6 +6,8 @@ import {
   nextSkipIndex,
   pointsForSkipIndex,
   buildSessionQueue,
+  MAX_PLAYER_NAME_LENGTH,
+  MAX_PLAYERS,
   type RoundLimit,
 } from './rules'
 import { createTrackSearcher } from './search'
@@ -14,7 +16,7 @@ import type { GameState, Player, Track } from '../types'
 function newPlayer(name: string): Player {
   return {
     id: crypto.randomUUID(),
-    name: name.trim(),
+    name: name.trim().slice(0, MAX_PLAYER_NAME_LENGTH),
     score: 0,
   }
 }
@@ -61,10 +63,13 @@ export function useGame() {
   const addPlayer = useCallback((name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    setState((s) => ({
-      ...s,
-      players: [...s.players, newPlayer(trimmed)],
-    }))
+    setState((s) => {
+      if (s.players.length >= MAX_PLAYERS) return s
+      return {
+        ...s,
+        players: [...s.players, newPlayer(trimmed)],
+      }
+    })
   }, [])
 
   const removePlayer = useCallback((id: string) => {

@@ -31,8 +31,3 @@ export function createTrackSearcher(tracks: Track[]) {
       }))
   }
 }
-
-export function displayTrack(track: Track): string {
-  if (track.artist && track.title) return `${track.artist} – ${track.title}`
-  return track.title || track.path
-}
