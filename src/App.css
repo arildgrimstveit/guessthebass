@@ -166,8 +166,6 @@ input {
 /* ——— Brand ——— */
 .setup-header {
   margin-bottom: 0.85rem;
-  padding-bottom: 0.7rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--walnut-light) 25%, #000);
   display: grid;
   gap: 0.5rem;
 }
