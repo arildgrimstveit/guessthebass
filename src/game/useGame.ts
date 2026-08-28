@@ -111,7 +111,7 @@ export function useGame() {
       }))
 
       try {
-        await audioEngine.resume()
+        await audioEngine.resume(track.file)
         await audioEngine.loadFile(track.file, track.id)
         if (gen !== loadGen.current) return
         audioEngine.playClip(clipDuration(0))

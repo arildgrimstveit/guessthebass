@@ -2,6 +2,9 @@ import { findEnergyStart } from './energyStart'
 import { computeAmplitudeEnvelope } from './waveform'
 
 const VOLUME_KEY = 'gtb-volume'
+const ENVELOPE_BARS = 64
+/** decodeAudioData expands to PCM (~1GB for a 1hr mix). Skip analysis on anything bigger than a long song. */
+const MAX_DECODE_BYTES = 20 * 1024 * 1024
 
 function clampVolume(n: number): number {
   if (!Number.isFinite(n)) return 1
@@ -18,45 +21,78 @@ function readStoredVolume(): number {
   }
 }
 
-type Prepared = {
-  key: string
-  buffer: AudioBuffer
-  energyStart: number
+function waitMetadata(audio: HTMLAudioElement): Promise<void> {
+  if (Number.isFinite(audio.duration) && audio.duration > 0) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const onOk = () => {
+      cleanup()
+      resolve()
+    }
+    const onErr = () => {
+      cleanup()
+      reject(new Error('Could not read audio'))
+    }
+    const cleanup = () => {
+      audio.removeEventListener('loadedmetadata', onOk)
+      audio.removeEventListener('error', onErr)
+    }
+    audio.addEventListener('loadedmetadata', onOk)
+    audio.addEventListener('error', onErr)
+    audio.load()
+  })
 }
+
+function downsample(src: Float32Array, bars: number): Float32Array {
+  if (bars < 1 || src.length === 0) return new Float32Array(0)
+  if (src.length === bars) return src
+  const out = new Float32Array(bars)
+  for (let i = 0; i < bars; i++) {
+    const a = Math.floor((i / bars) * src.length)
+    const b = Math.max(a + 1, Math.floor(((i + 1) / bars) * src.length))
+    let peak = 0
+    for (let j = a; j < b; j++) if (src[j] > peak) peak = src[j]
+    out[i] = peak
+  }
+  return out
+}
+
+type Analysis = { key: string; energyStart: number; envelope: Float32Array }
 
 class AudioEngine {
   private ctx: AudioContext | null = null
-  private gain: GainNode | null = null
-  private buffer: AudioBuffer | null = null
+  private media: HTMLAudioElement | null = null
+  private mediaUrl: string | null = null
+  private mediaFile: File | null = null
+  private clipTimer: ReturnType<typeof setTimeout> | null = null
   private currentKey: string | null = null
-  private source: AudioBufferSourceNode | null = null
   private energyStart = 0
-  private playStartedAt = 0
-  private playDuration = 0
+  private envelope: Float32Array | null = null
   private playOffset = 0
-  private pausedAt: number | null = null
+  private playDuration = 0
   private volume = readStoredVolume()
-  private prepared: Prepared | null = null
+  private prepared: Analysis | null = null
   private prefetchGen = 0
   private prefetchingKey: string | null = null
   private waveCache: { key: string | null; bars: number; data: Float32Array } | null = null
 
   private getContext(): AudioContext {
-    if (!this.ctx || this.ctx.state === 'closed') {
-      this.ctx = new AudioContext()
-      this.gain = null
-    }
+    if (!this.ctx || this.ctx.state === 'closed') this.ctx = new AudioContext()
     return this.ctx
   }
 
-  private getGain(): GainNode {
-    const ctx = this.getContext()
-    if (!this.gain || this.gain.context !== ctx) {
-      this.gain = ctx.createGain()
-      this.gain.gain.value = this.volume
-      this.gain.connect(ctx.destination)
+  private el(): HTMLAudioElement {
+    if (!this.media) {
+      this.media = new Audio()
+      this.media.preload = 'auto'
+      this.media.setAttribute('playsinline', '')
+      this.media.volume = this.volume
     }
-    return this.gain
+    return this.media
+  }
+
+  private duration(): number {
+    const d = this.media?.duration
+    return d != null && Number.isFinite(d) && d > 0 ? d : 0
   }
 
   getVolume(): number {
@@ -70,67 +106,68 @@ class AudioEngine {
     } catch {
       // private mode / blocked storage
     }
-    if (this.gain && this.gain.context.state !== 'closed') {
-      this.gain.gain.value = this.volume
+    if (this.media) this.media.volume = this.volume
+  }
+
+  /** Pass `file` on the Start tap so iOS allows later play() after we await decode/metadata. */
+  async resume(file?: File): Promise<void> {
+    if (file) {
+      const el = this.attach(file)
+      el.muted = true
+      void el.play().then(() => {
+        el.pause()
+        el.muted = false
+      }).catch(() => {
+        el.muted = false
+      })
     }
-  }
-
-  async resume(): Promise<void> {
     const ctx = this.getContext()
-    this.getGain()
-    if (ctx.state === 'suspended') {
-      await ctx.resume()
-    }
+    if (ctx.state === 'suspended') await ctx.resume()
   }
 
-  private async decodeFile(file: File): Promise<{ buffer: AudioBuffer; energyStart: number }> {
-    const ctx = this.getContext()
-    const arrayBuffer = await file.arrayBuffer()
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0))
-    return { buffer: audioBuffer, energyStart: findEnergyStart(audioBuffer) }
-  }
-
-  private activate(prepared: Prepared): void {
-    this.stop()
-    this.buffer = prepared.buffer
-    this.energyStart = prepared.energyStart
-    this.currentKey = prepared.key
-    this.waveCache = null
-    if (this.prepared?.key === prepared.key) this.prepared = null
-  }
-
-  /** Decode `file` and make it the current buffer (stops any current playback). */
   async loadFile(file: File, key: string): Promise<{ duration: number; energyStart: number }> {
-    if (this.currentKey === key && this.buffer) {
+    if (this.currentKey === key && this.mediaUrl) {
       this.stop()
-      return { duration: this.buffer.duration, energyStart: this.energyStart }
+      return { duration: this.duration(), energyStart: this.energyStart }
     }
 
     this.dropPrefetchUnless(key)
+    this.stop()
+
+    const el = this.attach(file)
+    const meta = waitMetadata(el)
+    let energyStart = 0
+    let envelope: Float32Array | null = null
 
     if (this.prepared?.key === key) {
-      const ready = this.prepared
-      this.activate(ready)
-      return { duration: ready.buffer.duration, energyStart: ready.energyStart }
+      energyStart = this.prepared.energyStart
+      envelope = this.prepared.envelope
+      this.prepared = null
+    } else if (file.size <= MAX_DECODE_BYTES) {
+      const analyzed = await this.analyze(file)
+      energyStart = analyzed.energyStart
+      envelope = analyzed.envelope
     }
 
-    this.stop()
-    const decoded = await this.decodeFile(file)
-    this.activate({ key, ...decoded })
-    return { duration: decoded.buffer.duration, energyStart: decoded.energyStart }
+    await meta
+    el.pause()
+    el.muted = false
+
+    this.currentKey = key
+    this.energyStart = energyStart
+    this.envelope = envelope
+    this.waveCache = null
+    return { duration: this.duration(), energyStart }
   }
 
-  /** Decode the next track in the background. Does not stop current playback. */
   prefetchFile(file: File, key: string): void {
-    if (!key || this.currentKey === key || this.prepared?.key === key || this.prefetchingKey === key) {
-      return
-    }
+    if (!key || file.size > MAX_DECODE_BYTES) return
+    if (this.currentKey === key || this.prepared?.key === key || this.prefetchingKey === key) return
     const token = ++this.prefetchGen
     this.prefetchingKey = key
-    void this.decodeFile(file)
+    void this.analyze(file)
       .then((decoded) => {
-        if (token !== this.prefetchGen) return
-        if (this.currentKey === key) return
+        if (token !== this.prefetchGen || this.currentKey === key) return
         this.prepared = { key, ...decoded }
       })
       .catch(() => {
@@ -149,135 +186,167 @@ class AudioEngine {
 
   getPlaybackState(): { elapsed: number; duration: number; playing: boolean } {
     const duration = this.playDuration
-    if (!this.ctx || duration <= 0) {
-      return { elapsed: 0, duration: 0, playing: false }
-    }
-    const elapsed = Math.min(
-      Math.max(0, this.ctx.currentTime - this.playStartedAt),
-      duration,
-    )
+    const el = this.media
+    if (!el || duration <= 0) return { elapsed: 0, duration: 0, playing: false }
+    const elapsed = Math.min(Math.max(0, el.currentTime - this.playOffset), duration)
     return { elapsed, duration, playing: this.isPlaying() }
   }
 
-  /** Position in the loaded file (seconds), for the full-track scrubber. */
   getTimeline(): { position: number; duration: number; playing: boolean } {
-    const duration = this.buffer?.duration ?? 0
-    if (!this.ctx || duration <= 0) {
-      return { position: 0, duration, playing: false }
-    }
-    if (this.pausedAt != null) {
-      return { position: this.pausedAt, duration, playing: false }
-    }
-    if (this.playDuration <= 0) {
-      return { position: 0, duration, playing: false }
-    }
-    const elapsed = Math.min(
-      Math.max(0, this.ctx.currentTime - this.playStartedAt),
-      this.playDuration,
-    )
+    const duration = this.duration()
     return {
-      position: Math.min(duration, this.playOffset + elapsed),
+      position: this.media && duration > 0 ? this.media.currentTime : 0,
       duration,
       playing: this.isPlaying(),
     }
   }
 
-  /** Loudness bars for the loaded file (cached per track). */
   getWaveform(bars: number): Float32Array {
-    if (!this.buffer || bars < 1) return new Float32Array(0)
+    if (!this.envelope || bars < 1) return new Float32Array(0)
     if (this.waveCache && this.waveCache.key === this.currentKey && this.waveCache.bars === bars) {
       return this.waveCache.data
     }
-    const data = computeAmplitudeEnvelope(this.buffer, bars)
+    const data = downsample(this.envelope, bars)
     this.waveCache = { key: this.currentKey, bars, data }
     return data
   }
 
   seek(positionSeconds: number): void {
-    if (!this.buffer) return
-    const duration = this.buffer.duration
-    const t = Math.min(Math.max(0, positionSeconds), Math.max(0, duration - 0.05))
-    this.pausedAt = null
-    void this.resume()
-    this.startSource(duration - t, t)
+    const total = this.duration()
+    if (total <= 0) return
+    const t = Math.min(Math.max(0, positionSeconds), Math.max(0, total - 0.05))
+    this.run(t, total - t, false)
   }
 
   /**
-   * restart: play from the energy hit for `durationSeconds` (Play button / new round).
-   * extend: if a clip is already playing, keep it going until the new duration;
-   *         if it already ended, play the full new length from the start.
+   * restart: play from the energy hit for `durationSeconds`.
+   * extend: if a clip is already playing, keep it going until the new duration.
    */
   playClip(durationSeconds: number, mode: 'restart' | 'extend' = 'restart'): void {
-    if (!this.buffer) return
-    this.pausedAt = null
+    const total = this.duration()
+    if (total <= 0) return
     const offset = this.energyStart
-    const maxDur = Math.max(0.01, this.buffer.duration - offset)
-    const dur = Math.min(durationSeconds, maxDur)
+    const dur = Math.min(durationSeconds, Math.max(0.01, total - offset))
 
-    if (mode === 'extend' && this.isPlaying()) {
+    if (mode === 'extend' && this.isPlaying() && this.media) {
       this.playDuration = dur
-      try {
-        this.source!.stop(this.playStartedAt + dur)
-      } catch {
-        this.startSource(dur)
-      }
+      this.clearClipTimer()
+      const remaining = dur - (this.media.currentTime - this.playOffset)
+      if (remaining <= 0) this.media.pause()
+      else this.armClipTimer(remaining)
       return
     }
 
-    this.startSource(dur)
+    this.run(offset, dur, true)
   }
 
-  /** Play the loaded file from 0:00 through the end. */
   playFull(): void {
-    if (!this.buffer) return
-    this.pausedAt = null
-    this.startSource(this.buffer.duration, 0)
+    const total = this.duration()
+    if (total <= 0) return
+    this.run(0, total, false)
   }
 
-  /** Pause full-track playback, or resume from the paused position. */
   togglePause(): void {
-    if (!this.buffer) return
+    const el = this.media
+    const total = this.duration()
+    if (!el || total <= 0) return
     if (this.isPlaying()) {
-      const { position } = this.getTimeline()
-      this.pausedAt = position
-      this.stopSourceOnly()
-      this.playDuration = 0
+      this.pause()
       return
     }
-    const t = this.pausedAt
-    if (t == null || t >= this.buffer.duration - 0.05) {
-      this.pausedAt = null
-      return
-    }
-    this.pausedAt = null
-    void this.resume()
-    this.startSource(this.buffer.duration - t, t)
+    if (el.currentTime >= total - 0.05) return
+    this.run(el.currentTime, total - el.currentTime, false)
   }
 
   stop(): void {
-    this.pausedAt = null
-    this.stopSourceOnly()
-    this.playDuration = 0
+    this.pause()
   }
 
   dispose(): void {
     this.clearPrefetch()
     this.stop()
-    this.buffer = null
     this.currentKey = null
+    this.envelope = null
     this.waveCache = null
-    if (this.gain) {
-      try {
-        this.gain.disconnect()
-      } catch {
-        // ignore
-      }
-      this.gain = null
+    this.revoke()
+    if (this.media) {
+      this.media.removeAttribute('src')
+      this.media.load()
+      this.media = null
     }
     if (this.ctx) {
       void this.ctx.close()
       this.ctx = null
     }
+  }
+
+  private async analyze(file: File): Promise<{ energyStart: number; envelope: Float32Array }> {
+    const ctx = this.getContext()
+    const audioBuffer = await ctx.decodeAudioData((await file.arrayBuffer()).slice(0))
+    return {
+      energyStart: findEnergyStart(audioBuffer),
+      envelope: computeAmplitudeEnvelope(audioBuffer, ENVELOPE_BARS),
+    }
+  }
+
+  private attach(file: File): HTMLAudioElement {
+    const el = this.el()
+    if (this.mediaFile === file && this.mediaUrl) return el
+    this.revoke()
+    this.mediaUrl = URL.createObjectURL(file)
+    this.mediaFile = file
+    el.src = this.mediaUrl
+    el.volume = this.volume
+    return el
+  }
+
+  private revoke(): void {
+    if (this.mediaUrl) URL.revokeObjectURL(this.mediaUrl)
+    this.mediaUrl = null
+    this.mediaFile = null
+  }
+
+  private run(offset: number, duration: number, clip: boolean): void {
+    const el = this.media
+    const total = this.duration()
+    if (!el || total <= 0) return
+    this.clearClipTimer()
+    const t = Math.min(Math.max(0, offset), Math.max(0, total - 0.05))
+    const playDur = Math.min(duration, Math.max(0.01, total - t))
+    el.volume = this.volume
+    try {
+      el.currentTime = t
+    } catch {
+      // not seekable yet
+    }
+    void el.play().catch(() => undefined)
+    this.playOffset = t
+    this.playDuration = playDur
+    if (clip && t + playDur < total - 0.05) this.armClipTimer(playDur)
+  }
+
+  private pause(): void {
+    this.clearClipTimer()
+    this.media?.pause()
+    this.playDuration = 0
+  }
+
+  private isPlaying(): boolean {
+    return !!this.media && !this.media.paused && !this.media.ended
+  }
+
+  private armClipTimer(seconds: number): void {
+    this.clearClipTimer()
+    this.clipTimer = window.setTimeout(() => {
+      this.clipTimer = null
+      this.media?.pause()
+    }, Math.max(0, seconds * 1000))
+  }
+
+  private clearClipTimer(): void {
+    if (this.clipTimer == null) return
+    window.clearTimeout(this.clipTimer)
+    this.clipTimer = null
   }
 
   private dropPrefetchUnless(key: string): void {
@@ -286,54 +355,6 @@ class AudioEngine {
       this.prefetchingKey = null
     }
     if (this.prepared && this.prepared.key !== key) this.prepared = null
-  }
-
-  private isPlaying(): boolean {
-    if (!this.source || !this.ctx) return false
-    return this.ctx.currentTime < this.playStartedAt + this.playDuration - 0.005
-  }
-
-  private startSource(dur: number, offset = this.energyStart): void {
-    this.pausedAt = null
-    this.stopSourceOnly()
-    if (!this.buffer) return
-    const ctx = this.getContext()
-    const maxDur = Math.max(0.01, this.buffer.duration - offset)
-    const playDur = Math.min(dur, maxDur)
-    const source = ctx.createBufferSource()
-    source.buffer = this.buffer
-    source.connect(this.getGain())
-    const when = ctx.currentTime
-    source.start(when, offset)
-    try {
-      source.stop(when + playDur)
-    } catch {
-      // ignore
-    }
-    source.onended = () => {
-      if (this.source === source) this.source = null
-    }
-    this.playStartedAt = when
-    this.playDuration = playDur
-    this.playOffset = offset
-    this.source = source
-  }
-
-  private stopSourceOnly(): void {
-    if (this.source) {
-      this.source.onended = null
-      try {
-        this.source.stop()
-      } catch {
-        // already stopped
-      }
-      try {
-        this.source.disconnect()
-      } catch {
-        // ignore
-      }
-      this.source = null
-    }
   }
 }
 

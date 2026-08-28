@@ -16,7 +16,7 @@
   --cream-soft: #d8c4ae;
   --cream-dim: #a89078;
 
-  --bg: var(--ink);
+  --bg: var(--walnut-deep);
   --bg-panel: color-mix(in srgb, var(--walnut) 55%, var(--ink) 45%);
   --bg-elevated: color-mix(in srgb, var(--walnut-mid) 40%, var(--ink) 60%);
   --border: color-mix(in srgb, var(--walnut-light) 28%, #000 72%);
@@ -37,51 +37,7 @@
   --radius-sm: 8px;
   --font-display: 'Fraunces', 'Times New Roman', serif;
   --font-ui: 'Syne', system-ui, sans-serif;
-  font-family: var(--font-ui);
-  line-height: 1.35;
-  font-weight: 450;
-  font-variant-numeric: lining-nums tabular-nums;
-  font-feature-settings: 'lnum' 1, 'tnum' 1;
-  background: var(--bg);
-  color: var(--text);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -webkit-text-size-adjust: 100%;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  margin: 0;
-  min-height: 100%;
-  min-height: 100dvh;
-  min-height: 100svh;
-}
-
-body {
-  overflow-x: hidden;
-  background-color: var(--ink);
-  background-attachment: fixed;
-}
-
-body::before,
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-}
-
-body::before {
-  z-index: 1;
-  background:
+  --bg-wash:
     linear-gradient(
       165deg,
       rgba(232, 90, 28, 0.16) 0%,
@@ -93,12 +49,7 @@ body::before {
     radial-gradient(780px 460px at 8% 108%, rgba(179, 58, 15, 0.22), transparent 52%),
     linear-gradient(180deg, rgba(5, 4, 3, 0.28), transparent 20%, transparent 78%, rgba(5, 4, 3, 0.5)),
     radial-gradient(ellipse at center, transparent 42%, rgba(0, 0, 0, 0.5) 100%);
-}
-
-body::after {
-  z-index: 0;
-  background-attachment: fixed;
-  background:
+  --bg-wood:
     radial-gradient(ellipse 180px 90px at 18% 22%, rgba(196, 137, 74, 0.14), transparent 70%),
     radial-gradient(ellipse 220px 120px at 72% 38%, rgba(90, 58, 36, 0.45), transparent 68%),
     radial-gradient(ellipse 160px 200px at 40% 70%, rgba(26, 16, 10, 0.7), transparent 65%),
@@ -114,6 +65,69 @@ body::after {
       transparent 40px
     ),
     linear-gradient(145deg, #24160f 0%, #1a100a 40%, #2e1c14 70%, #140e09 100%);
+  font-family: var(--font-ui);
+  line-height: 1.35;
+  font-weight: 450;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: 'lnum' 1, 'tnum' 1;
+  background-color: var(--walnut-deep);
+  background-image: var(--bg-wash), var(--bg-wood);
+  color: var(--text);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  margin: 0;
+  min-height: 100%;
+  min-height: 100svh;
+  min-height: 100dvh;
+  min-height: 100lvh;
+  min-height: -webkit-fill-available;
+}
+
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  min-height: 100svh;
+  min-height: 100dvh;
+}
+
+body {
+  overflow-x: hidden;
+  background: transparent;
+}
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  top: calc(-1 * env(safe-area-inset-top, 0px));
+  right: calc(-1 * env(safe-area-inset-right, 0px));
+  bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+  left: calc(-1 * env(safe-area-inset-left, 0px));
+  min-height: 100lvh;
+  pointer-events: none;
+}
+
+body::before {
+  z-index: 1;
+  background-image: var(--bg-wash);
+}
+
+body::after {
+  z-index: 0;
+  background-color: var(--walnut-deep);
+  background-image: var(--bg-wood);
 }
 
 #root {
