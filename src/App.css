@@ -28,6 +28,11 @@
   --warn: #e8a84a;
   --shadow: 0 22px 60px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 0, 0, 0.4);
   --safe: clamp(1.25rem, 3vw, 2.5rem);
+  --safe-top: max(var(--safe), env(safe-area-inset-top, 0px));
+  --safe-right: max(var(--safe), env(safe-area-inset-right, 0px));
+  --safe-bottom: max(var(--safe), env(safe-area-inset-bottom, 0px));
+  --safe-left: max(var(--safe), env(safe-area-inset-left, 0px));
+  --keyboard: 0px;
   --radius: 10px;
   --radius-sm: 8px;
   --font-display: 'Fraunces', 'Times New Roman', serif;
@@ -42,6 +47,7 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
 }
 
 *,
@@ -56,6 +62,7 @@ body,
   margin: 0;
   min-height: 100%;
   min-height: 100dvh;
+  min-height: 100svh;
 }
 
 body {
@@ -117,6 +124,7 @@ body::after {
 button,
 input {
   font: inherit;
+  touch-action: manipulation;
 }
 
 .sr-only {
@@ -133,7 +141,8 @@ input {
 
 .screen {
   min-height: 100dvh;
-  padding: var(--safe);
+  min-height: 100svh;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
   max-width: 1180px;
   margin: 0 auto;
 }
@@ -145,7 +154,9 @@ input {
   justify-content: safe center;
   max-width: none;
   width: 100%;
-  padding-block: clamp(0.65rem, 1.8vh, 1.25rem);
+  padding-top: var(--safe-top);
+  padding-bottom: max(var(--safe-bottom), var(--keyboard));
+  padding-inline: var(--safe-left) var(--safe-right);
 }
 
 .setup-stack {
@@ -591,7 +602,10 @@ h2 {
   border-radius: 8px;
   color: var(--cream);
   padding: 0.9rem 1.05rem;
+  font-size: 1.05rem;
   box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.55);
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .input::placeholder {
@@ -704,6 +718,7 @@ h2 {
   gap: 0.75rem;
   max-width: 1400px;
   min-height: 100dvh;
+  min-height: 100svh;
 }
 
 .play-top {
@@ -1305,7 +1320,7 @@ h2 {
   justify-content: safe center;
   max-width: none;
   width: 100%;
-  padding-block: clamp(1.5rem, 4vh, 3rem);
+  padding-block: max(clamp(1.5rem, 4vh, 3rem), var(--safe-top)) max(clamp(1.5rem, 4vh, 3rem), var(--safe-bottom));
 }
 
 .finish-stage {
@@ -1509,4 +1524,153 @@ h2 {
   .finish-board li.is-first .finish-name {
     font-size: 1.12rem;
   }
+}
+
+/* ——— Mobile (Safari chrome, keyboard, coarse pointer) ——— */
+.is-mobile .screen {
+  padding-bottom: calc(var(--safe-bottom) + var(--keyboard));
+}
+
+.is-mobile .input,
+.is-mobile .input-lg,
+.is-mobile .input-xl {
+  font-size: 16px;
+}
+
+.is-mobile .input-xl {
+  padding: 0.95rem 1rem;
+}
+
+.is-mobile .play-screen {
+  gap: 0.55rem;
+  overscroll-behavior: none;
+}
+
+.is-mobile .play-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'brand host'
+    'score score'
+    'vol vol';
+  align-items: stretch;
+  gap: 0.45rem;
+}
+
+.is-mobile .play-brand {
+  grid-area: brand;
+  padding: 0.45rem 0.7rem;
+}
+
+.is-mobile .play-brand .eyebrow {
+  display: none;
+}
+
+.is-mobile .play-brand .round-meta {
+  margin-top: 0;
+  font-size: 0.95rem;
+}
+
+.is-mobile .play-host-slot {
+  grid-area: host;
+}
+
+.is-mobile .play-score-slot {
+  grid-area: score;
+}
+
+.is-mobile .play-score-slot .scoreboard {
+  width: 100%;
+  max-height: 4.25rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.is-mobile .play-vol-slot {
+  grid-area: vol;
+}
+
+.is-mobile .play-vol-slot .volume-control {
+  width: 100%;
+  min-height: 2.6rem;
+}
+
+.is-mobile .play-vol-slot .volume-control input[type='range'] {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.is-mobile .play-end {
+  padding: 0.55rem 0.75rem;
+  font-size: 0.78rem;
+}
+
+.is-mobile .center-stage {
+  justify-content: flex-start;
+  padding: 0.15rem 0 0;
+  gap: 0.55rem;
+}
+
+.is-mobile .play-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.is-mobile .play-main .lede {
+  position: static;
+  transform: none;
+  left: auto;
+  top: auto;
+}
+
+.is-mobile .search-anchor {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.is-mobile .play-above {
+  position: static;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  width: 100%;
+}
+
+.is-mobile .clip-label {
+  font-size: clamp(2.4rem, 14vw, 4.2rem);
+}
+
+.is-mobile .search-block {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  margin-top: auto;
+  padding-top: 0.35rem;
+  background: linear-gradient(180deg, transparent, rgba(5, 4, 3, 0.92) 28%);
+}
+
+.is-mobile .search-menu {
+  top: auto;
+  bottom: calc(100% + 0.4rem);
+  max-height: min(36vh, 16rem);
+}
+
+.is-mobile .setup-stack {
+  width: 100%;
+}
+
+.is-mobile .btn-xl {
+  min-height: 3rem;
+  padding: 0.9rem 1.15rem;
 }

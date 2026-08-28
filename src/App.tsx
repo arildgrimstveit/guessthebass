@@ -1,11 +1,15 @@
+import { useEffect } from 'react'
 import { SetupScreen } from './ui/SetupScreen'
 import { PlayScreen } from './ui/PlayScreen'
 import { useGame } from './game/useGame'
+import { syncMobileChrome } from './ui/device'
 import './App.css'
 
 export default function App() {
   const game = useGame()
   const { state } = game
+
+  useEffect(() => syncMobileChrome(), [])
 
   if (state.phase === 'setup') {
     return (

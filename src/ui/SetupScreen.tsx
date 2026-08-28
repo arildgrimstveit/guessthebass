@@ -12,6 +12,7 @@ import {
 } from '../files/loadFolder'
 import { VolumeControl } from './VolumeControl'
 import { ROUND_OPTIONS, MAX_PLAYER_NAME_LENGTH, MAX_PLAYERS, type RoundLimit } from '../game/rules'
+import { isIos } from './device'
 import type { Player, Track } from '../types'
 
 interface SetupScreenProps {
@@ -30,6 +31,36 @@ function folderLoadLabel(p: FolderLoadProgress): string {
   }
   if (p.total > 0) return `Reading ${p.done} / ${p.total}`
   return 'Loading…'
+}
+
+function fullscreenAvailable(): boolean {
+  if (typeof document === 'undefined') return false
+  // iOS Safari's Fullscreen API on <html> reloads/crashes the tab (wiping session state).
+  if (isIos()) return false
+  const doc = document as Document & { webkitFullscreenEnabled?: boolean }
+  if (doc.fullscreenEnabled === false || doc.webkitFullscreenEnabled === false) return false
+  const el = document.documentElement as HTMLElement & {
+    requestFullscreen?: () => Promise<void>
+    webkitRequestFullscreen?: () => void
+  }
+  return typeof (el.requestFullscreen ?? el.webkitRequestFullscreen) === 'function'
+}
+
+function enterFullscreen(): void {
+  if (!fullscreenAvailable()) return
+  const doc = document as Document & { webkitFullscreenElement?: Element | null }
+  if (doc.fullscreenElement || doc.webkitFullscreenElement) return
+  const el = document.documentElement as HTMLElement & {
+    requestFullscreen?: () => Promise<void>
+    webkitRequestFullscreen?: () => void
+  }
+  try {
+    const req = el.requestFullscreen?.()
+    if (req && typeof req.catch === 'function') void req.catch(() => undefined)
+    else el.webkitRequestFullscreen?.()
+  } catch {
+    // unsupported or blocked
+  }
 }
 
 function StepHeading({ index, title, note }: { index: string; title: string; note?: string }) {
@@ -159,12 +190,7 @@ export function SetupScreen({
     setPlayerInput('')
   }
 
-  function enterFullscreen() {
-    const el = document.documentElement
-    if (!document.fullscreenElement) {
-      void el.requestFullscreen?.()
-    }
-  }
+  const canFullscreen = fullscreenAvailable()
 
   return (
     <div className="screen setup-screen">
@@ -180,15 +206,7 @@ export function SetupScreen({
         </header>
 
       <section className="panel">
-        <StepHeading
-          index="01"
-          title="Music folder"
-          note={
-            canPick
-              ? undefined
-              : 'This browser can’t remember folders — you’ll pick again after a refresh. Chrome or Edge remember the last folder.'
-          }
-        />
+        <StepHeading index="01" title="Music folder" />
         <div className="button-row">
           {canPick ? (
             <>
@@ -273,6 +291,11 @@ export function SetupScreen({
             onChange={(e) => setPlayerInput(e.target.value)}
             placeholder={atPlayerCap ? `${MAX_PLAYERS} players max` : 'Player name'}
             maxLength={MAX_PLAYER_NAME_LENGTH}
+            autoComplete="off"
+            autoCapitalize="words"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="done"
             disabled={atPlayerCap}
           />
           <button type="submit" className="btn btn-secondary btn-lg" disabled={atPlayerCap}>
@@ -344,9 +367,11 @@ export function SetupScreen({
           >
             Start game
           </button>
-          <button type="button" className="btn btn-ghost btn-lg" onClick={enterFullscreen}>
-            Fullscreen
-          </button>
+          {canFullscreen ? (
+            <button type="button" className="btn btn-ghost btn-lg" onClick={enterFullscreen}>
+              Fullscreen
+            </button>
+          ) : null}
           <VolumeControl />
         </div>
         </section>

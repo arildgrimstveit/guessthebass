@@ -14,6 +14,7 @@ import { VolumeControl } from './VolumeControl'
 import { audioEngine } from '../audio/engine'
 import type { SearchHit } from '../game/search'
 import type { GameState, Player, Track } from '../types'
+import { isMobileUi } from './device'
 
 interface PlayScreenProps {
   state: GameState
@@ -68,7 +69,7 @@ export function PlayScreen({
   }, [hits.length, selected])
 
   useEffect(() => {
-    if (state.phase === 'playing' && !state.loadingRound) {
+    if (state.phase === 'playing' && !state.loadingRound && !isMobileUi()) {
       inputRef.current?.focus()
     }
   }, [state.phase, state.loadingRound, state.roundIndex])
@@ -207,7 +208,11 @@ export function PlayScreen({
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="Type artist or title…"
                       autoComplete="off"
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       spellCheck={false}
+                      enterKeyHint="search"
+                      inputMode="search"
                       disabled={state.loadingRound}
                       aria-autocomplete="list"
                       aria-controls="search-results"
